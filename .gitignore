@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Environment Variables (IMPORTANT: Do not commit sensitive data)
+.env
+.env.bak
+
+# Database
+*.db
+schedule.db
+
+# Logs
+*.log
+scraper/*.log
+
+# IDE
+.vscode/
+.idea/
