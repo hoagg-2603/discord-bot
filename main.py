@@ -11,32 +11,34 @@ from scraper.client import PTITClient
 
 # ... existing imports ...
 
+# Track seen emails to avoid spamming the same ones
+SEEN_EMAILS = set()
+
 async def check_emails_job():
     """
-    Runs periodically to check for important emails.
+    Runs periodically to check for ANY new emails.
     """
     print("Checking Outlook emails...")
     client = OutlookClient(headless=True)
     try:
-        # Pass hardcoded credentials or just rely on session state
-        # Login logic within client handles session first, then falls back to args.
-        # We need to pass args just in case re-login is needed? 
-        # For now, let's rely on session mostly, but pass vars if available.
-        # But wait, OutlookClient logic I wrote imports dotenv inside main() for test, 
-        # but inside class it accepts args.
-        # We should load credentials here if needed.
-        
+        # Load credentials
         email = "HoangNH.B22CN336@stu.ptit.edu.vn"
         password = SCHOOL_PASS # From .env
         
         await client.start()
-        # Try login (will use session if valid)
         await client.login(email, password)
         
-        emails = await client.check_recent_emails()
+        current_emails = await client.check_recent_emails()
         
-        if emails:
-            print(f"Found {len(emails)} important emails!")
+        # Filter new emails
+        new_emails = []
+        for email_subject in current_emails:
+            if email_subject not in SEEN_EMAILS:
+                new_emails.append(email_subject)
+                SEEN_EMAILS.add(email_subject)
+        
+        if new_emails:
+            print(f"Found {len(new_emails)} NEW emails!")
             # Notify
             target_channel = None
             if NOTIFICATION_CHANNEL_ID:
@@ -46,14 +48,14 @@ async def check_emails_job():
                 target_channel = bot.guilds[0].system_channel or bot.guilds[0].text_channels[0]
                 
             if target_channel:
-                msg = "📧 **CÓ EMAIL MỚI TỪ TRƯỜNG!** (Chứa từ khóa 'Nghỉ'/'Bù')\n"
+                msg = "📧 **EMAIL MỚI TỪ OUTLOOK!**\n"
                 msg += "--------------------------------------\n"
-                for subject in emails:
-                    msg += f"📩 {subject}\n"
+                for subject in new_emails:
+                    msg += f"📥 {subject}\n"
                 msg += "\nCheck mail ngay: https://outlook.office.com/mail/"
                 await target_channel.send(msg)
         else:
-            print("No new important emails.")
+            print("No new emails found (all seen).")
             
     except Exception as e:
         print(f"Email check failed: {e}")

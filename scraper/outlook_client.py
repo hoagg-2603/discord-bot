@@ -118,8 +118,14 @@ class OutlookClient:
             for item in items:
                 text = await item.text_content()
                 if text:
-                    clean_text = text.lower()
-                    if "nghỉ" in clean_text or "bù" in clean_text:
+                    # Return all emails found
+                    # Clean up text (it contains sender, subject, preview...)
+                    # Usually: "Sender\nSubject\nPreview"
+                    lines = text.split('\n')
+                    if len(lines) >= 2:
+                        subject = lines[0].strip() + " - " + lines[1].strip() # Sender - Subject
+                        emails.append(subject)
+                    else:
                         emails.append(text.split('\n')[0].strip())
         except Exception as e:
             print(f"Error scanning emails: {e}")
