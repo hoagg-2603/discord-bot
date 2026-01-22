@@ -149,6 +149,84 @@ def get_schedule_by_date(discord_id, target_date):
             }
             for r in rows
         ]
+    # ... (existing get_schedule_by_date code) ...
     finally:
         conn.close()
+
+def get_upcoming_classes(minutes_window=60):
+    """
+    Find classes starting within the next `minutes_window` minutes.
+    Returns list of dicts.
+    """
+    from datetime import datetime, timedelta
+    from utils.time_utils import PERIOD_START_TIME
+    
+    # Current time in System Local Time (Assuming Server/Phone is correct or we adjusting)
+    # User said "sync with Vietnam clock".
+    # Termux/Android usually follows system time. 
+    # If VPS, ensure TZ=Asia/Ho_Chi_Minh or handle offset.
+    # Safe way: datetime.now() if system is correct.
+    
+    now = datetime.now()
+    
+    # We look for classes TODAY
+    today_str = now.strftime("%Y-%m-%d")
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    upcoming = []
+    
+    try:
+        # Get all classes for today
+        cursor.execute("""
+            SELECT user_id, subject_name, room, period_start, teacher
+            FROM schedules
+            WHERE date = ?
+        """, (today_str,))
+        
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            user_id, subject, room, p_start, teacher = row
+            
+            # Get start time string "HH:MM"
+            start_time_str = PERIOD_START_TIME.get(p_start)
+            if not start_time_str:
+                continue
+                
+            # Create datetime for this class start
+            # Format: YYYY-MM-DD HH:MM
+            class_dt_str = f"{today_str} {start_time_str}:00"
+            class_dt = datetime.strptime(class_dt_str, "%Y-%m-%d %H:%M:%S")
+            
+            # Calculate difference
+            # upcoming means: now < class_dt <= now + window
+            # But user wants "remind 1 hour before".
+            # Means if class is at 8:00, remind at 7:00.
+            # So if (class_dt - now) is between 55 and 65 minutes (approx 1 hour).
+            # Or just "Is class starting in [0, 60] minutes?"
+            
+            delta = class_dt - now
+            minutes_diff = delta.total_seconds() / 60
+            
+            # Condition: Class is in the future AND within window
+            # Let's say we check every 5 mins.
+            # We want to catch it when minutes_diff is around 60.
+            # Range: 50 < minutes_diff <= 65 ?
+            
+            if 45 <= minutes_diff <= 75: # Broad window to catch "1 hour before", run job every 15-30m
+                upcoming.append({
+                    "user_id": user_id,
+                    "subject": subject,
+                    "room": room,
+                    "time": start_time_str,
+                    "minutes_left": int(minutes_diff),
+                    "start_period": p_start
+                })
+                
+    finally:
+        conn.close()
+        
+    return upcoming
 

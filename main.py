@@ -5,7 +5,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from database.operations import save_schedule, save_user, get_schedule_by_date
+from database.operations import save_schedule, save_user, get_schedule_by_date, get_upcoming_classes
 from scraper.client import PTITClient
 from datetime import datetime, timedelta
 
@@ -63,33 +63,75 @@ async def sync_schedule_job():
     finally:
         await client.close()
 
+async def check_upcoming_classes_job():
+    """
+    Runs every 30 minutes to check for upcoming classes.
+    """
+    print("Checking for upcoming classes...")
+    # Offload DB call
+    upcoming = await bot.loop.run_in_executor(None, get_upcoming_classes, 60)
+    
+    if not upcoming:
+        return
+        
+    print(f"Found {len(upcoming)} upcoming classes.")
+    
+    # Send notification
+    # Strategy: Send to the last channel used for !tkb or a default channel
+    target_channel = None
+    if NOTIFICATION_CHANNEL_ID:
+        target_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
+    
+    # If no channel found, try first guild system channel
+    if not target_channel and bot.guilds:
+        target_channel = bot.guilds[0].system_channel or bot.guilds[0].text_channels[0]
+        
+    if target_channel:
+        for cls in upcoming:
+            # Simple deduplication could be added here (check if already noted)
+            # But running every 30 mins with 45-75 min window might trigger twice?
+            # 45 <= diff <= 75. 
+            # If run at 7:00 (class 8:00, diff 60) -> Alert.
+            # If run at 7:30 (class 8:00, diff 30) -> No alert (diff < 45).
+            # So 30 min interval is safe.
+            
+             msg = (f"🔔 **SẮP ĐI HỌC!** (> {cls['minutes_left']} phút nữa)\n"
+                    f"📚 Môn: **{cls['subject']}**\n"
+                    f"🏫 Phòng: **{cls['room']}**\n"
+                    f"⏰ Bắt đầu: **{cls['time']}** (Tiết {cls['start_period']})")
+             await target_channel.send(msg)
+             print(f"Sent notification for {cls['subject']}")
+    else:
+        print("No channel to send notifications!")
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     
     # Start Scheduler
-    # 00:00
+    # Sync data 00:00 & 12:00
     scheduler.add_job(sync_schedule_job, CronTrigger(hour=0, minute=0))
-    # 12:00
     scheduler.add_job(sync_schedule_job, CronTrigger(hour=12, minute=0))
+    
+    # Check for class reminders every 30 minutes
+    scheduler.add_job(check_upcoming_classes_job, 'interval', minutes=30)
     
     # Testing: Run immediately on startup to verify (Uncomment to test)
     # await sync_schedule_job()
     
     scheduler.start()
-    print("Scheduler started (00:00 and 12:00 scan configured).")
+    print("Scheduler started (Sync: 00/12h, Remind: Every 30m).")
 
 @bot.command()
 async def ping(ctx):
     await ctx.send('Pong!')
 
-from datetime import datetime, timedelta
-from database.operations import save_schedule, save_user, get_schedule_by_date
-
-# ... existing imports ...
-
 @bot.command()
 async def tkb(ctx, date_arg="homnay"):
+    global NOTIFICATION_CHANNEL_ID
+    # Update notification channel to where user interacts
+    NOTIFICATION_CHANNEL_ID = ctx.channel.id
+    
     """
     Xem thời khóa biểu. 
     Sử dụng: !tkb [homnay | mai | yyyy-mm-dd]
