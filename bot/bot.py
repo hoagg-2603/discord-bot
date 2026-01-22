@@ -5,7 +5,8 @@ from config.settings import DISCORD_TOKEN
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
+# intents.members = True # Enable this in Developer Portal if you need member caching
+
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
