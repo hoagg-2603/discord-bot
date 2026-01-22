@@ -11,12 +11,61 @@ from scraper.client import PTITClient
 
 # ... existing imports ...
 
-# Track seen emails to avoid spamming the same ones
+# ... existing code ...
+
+# Track seen emails to avoid spamming the same ones (Global)
 SEEN_EMAILS = set()
 
-async def check_emails_job():
+async def check_gmail_job():
     """
-    Runs periodically to check for ANY new emails.
+    Runs frequently to check for new emails in Gmail (IMAP is fast).
+    """
+    from scraper.gmail_client import GmailClient
+    
+    print("Checking Gmail...")
+    user = os.getenv("GMAIL_USER")
+    pwd = os.getenv("GMAIL_PASSWORD")
+    
+    if not user or not pwd:
+        return
+
+    def run_check():
+        client = GmailClient(user, pwd)
+        found = []
+        if client.connect():
+             found = client.check_emails(look_back=5)
+             client.close()
+        return found
+        
+    emails = await bot.loop.run_in_executor(None, run_check)
+    
+    if emails:
+        new_emails = []
+        for subj in emails:
+            if subj not in SEEN_EMAILS:
+                new_emails.append(subj)
+                SEEN_EMAILS.add(subj)
+                
+        if new_emails:
+            print(f"Found {len(new_emails)} NEW GMAILs!")
+            target_channel = None
+            if NOTIFICATION_CHANNEL_ID:
+                target_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
+            
+            if not target_channel and bot.guilds:
+                target_channel = bot.guilds[0].system_channel or bot.guilds[0].text_channels[0]
+                
+            if target_channel:
+                 msg = "📧 **EMAIL MỚI TỪ GMAIL!**\n"
+                 msg += "--------------------------------------\n"
+                 for subject in new_emails:
+                     msg += f"📩 {subject}\n"
+                 msg += "\nCheck mail: https://mail.google.com/"
+                 await target_channel.send(msg)
+
+async def check_outlook_job():
+    """
+    Runs periodically to check for Outlook emails.
     """
     print("Checking Outlook emails...")
     client = OutlookClient(headless=True)
@@ -38,7 +87,7 @@ async def check_emails_job():
                 SEEN_EMAILS.add(email_subject)
         
         if new_emails:
-            print(f"Found {len(new_emails)} NEW emails!")
+            print(f"Found {len(new_emails)} NEW Outlook emails!")
             # Notify
             target_channel = None
             if NOTIFICATION_CHANNEL_ID:
@@ -55,27 +104,16 @@ async def check_emails_job():
                 msg += "\nCheck mail ngay: https://outlook.office.com/mail/"
                 await target_channel.send(msg)
         else:
-            print("No new emails found (all seen).")
+            print("No new Outlook emails.")
             
     except Exception as e:
-        print(f"Email check failed: {e}")
+        print(f"Outlook check failed: {e}")
     finally:
         await client.close()
 
 # ... existing code ...
 
-@bot.event
-async def on_ready():
-    # ... existing on_ready code ...
-    
-    # Check for class reminders every 30 minutes
-    scheduler.add_job(check_upcoming_classes_job, 'interval', minutes=30)
-    
-    # Check for emails every 60 minutes (Outlook check is heavy)
-    scheduler.add_job(check_emails_job, 'interval', minutes=60)
-    
-    scheduler.start()
-    print("Scheduler started (Sync: 00/12h, Remind: 30m, Email: 60m).")
+
 
 from datetime import datetime, timedelta
 
@@ -186,11 +224,14 @@ async def on_ready():
     # Check for class reminders every 30 minutes
     scheduler.add_job(check_upcoming_classes_job, 'interval', minutes=30)
     
-    # Testing: Run immediately on startup to verify (Uncomment to test)
-    # await sync_schedule_job()
+    # Check for Gmail messages every 5 minutes (IMAP is cheap)
+    scheduler.add_job(check_gmail_job, 'interval', minutes=5)
+
+    # Check for Outlook emails every 60 minutes (Heavy browser task)
+    scheduler.add_job(check_outlook_job, 'interval', minutes=60)
     
     scheduler.start()
-    print("Scheduler started (Sync: 00/12h, Remind: Every 30m).")
+    print("Scheduler started (Sync: 00/12h, Remind: 30m, Gmail: 5m, Outlook: 60m).")
 
 @bot.command()
 async def ping(ctx):
