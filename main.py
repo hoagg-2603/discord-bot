@@ -54,7 +54,8 @@ async def sync_schedule_job():
         # Actually, the credentials in .env are likely for ONE student.
         # So we save for that student code.
         
-        save_schedule("global_bot_user", data) # Placeholder ID
+        # Offload blocking DB call
+        await bot.loop.run_in_executor(None, save_schedule, "global_bot_user", data)
         print("Scheduled sync completed.")
         
     except Exception as e:
@@ -116,7 +117,9 @@ async def tkb(ctx, date_arg="homnay"):
             return
 
     date_str = target_date.strftime("%Y-%m-%d")
-    schedules = get_schedule_by_date("global_bot_user", date_str)
+    
+    # Offload blocking DB call
+    schedules = await bot.loop.run_in_executor(None, get_schedule_by_date, "global_bot_user", date_str)
     
     if not schedules:
         await ctx.send(f"📅 **{date_str}**: Không có lịch học (hoặc chưa đồng bộ dữ liệu).")
