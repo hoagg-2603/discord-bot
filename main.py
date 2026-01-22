@@ -6,7 +6,75 @@ from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from database.operations import save_schedule, save_user, get_schedule_by_date, get_upcoming_classes
+from scraper.outlook_client import OutlookClient
 from scraper.client import PTITClient
+
+# ... existing imports ...
+
+async def check_emails_job():
+    """
+    Runs periodically to check for important emails.
+    """
+    print("Checking Outlook emails...")
+    client = OutlookClient(headless=True)
+    try:
+        # Pass hardcoded credentials or just rely on session state
+        # Login logic within client handles session first, then falls back to args.
+        # We need to pass args just in case re-login is needed? 
+        # For now, let's rely on session mostly, but pass vars if available.
+        # But wait, OutlookClient logic I wrote imports dotenv inside main() for test, 
+        # but inside class it accepts args.
+        # We should load credentials here if needed.
+        
+        email = "HoangNH.B22CN336@stu.ptit.edu.vn"
+        password = SCHOOL_PASS # From .env
+        
+        await client.start()
+        # Try login (will use session if valid)
+        await client.login(email, password)
+        
+        emails = await client.check_recent_emails()
+        
+        if emails:
+            print(f"Found {len(emails)} important emails!")
+            # Notify
+            target_channel = None
+            if NOTIFICATION_CHANNEL_ID:
+                target_channel = bot.get_channel(NOTIFICATION_CHANNEL_ID)
+            
+            if not target_channel and bot.guilds:
+                target_channel = bot.guilds[0].system_channel or bot.guilds[0].text_channels[0]
+                
+            if target_channel:
+                msg = "📧 **CÓ EMAIL MỚI TỪ TRƯỜNG!** (Chứa từ khóa 'Nghỉ'/'Bù')\n"
+                msg += "--------------------------------------\n"
+                for subject in emails:
+                    msg += f"📩 {subject}\n"
+                msg += "\nCheck mail ngay: https://outlook.office.com/mail/"
+                await target_channel.send(msg)
+        else:
+            print("No new important emails.")
+            
+    except Exception as e:
+        print(f"Email check failed: {e}")
+    finally:
+        await client.close()
+
+# ... existing code ...
+
+@bot.event
+async def on_ready():
+    # ... existing on_ready code ...
+    
+    # Check for class reminders every 30 minutes
+    scheduler.add_job(check_upcoming_classes_job, 'interval', minutes=30)
+    
+    # Check for emails every 60 minutes (Outlook check is heavy)
+    scheduler.add_job(check_emails_job, 'interval', minutes=60)
+    
+    scheduler.start()
+    print("Scheduler started (Sync: 00/12h, Remind: 30m, Email: 60m).")
+
 from datetime import datetime, timedelta
 
 load_dotenv()

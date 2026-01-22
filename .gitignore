@@ -19,3 +19,6 @@ scraper/*.log
 # IDE
 .vscode/
 .idea/
+
+# Session
+outlook_state.json
