@@ -1,62 +1,43 @@
-# Hướng dẫn Cài đặt Bot trên Android (Termux)
+# Hướng dẫn Cập nhật Bot trên Android (Termux)
 
-Bạn đã vào được Ubuntu (`root@localhost`). Bây giờ hãy chạy lần lượt các nhóm lệnh sau:
+Bạn muốn **loại bỏ bản cũ** và chạy bản mới nhất với cấu trúc "khoa học" vừa làm.
 
-## 1. Cập nhật và Cài đặt Python + Git
-Copy và chạy lệnh này để cài các công cụ cơ bản:
-```bash
-apt update && apt upgrade -y
-apt install python3 python3-pip git nano -y
-```
+### Bước 1: Dừng Bot cũ
+- Mở Termux.
+- Nếu bot đang chạy, nhấn `Ctrl + C` để dừng.
 
-## 2. Kéo Code Bot về máy
-Chúng ta sẽ clone code từ máy tính của bạn hoặc tạo mới.
-*Cách dễ nhất là tạo thư mục và copy file, nhưng để chuyên nghiệp, ta sẽ giả lập tạo mới.*
+### Bước 2: Cập nhật Code (Khuyên dùng Git)
+Nếu bạn đã cài qua Git (GitHub), hãy chạy lệnh sau để lấy code mới và xóa sạch file thừa cũ:
 
 ```bash
-# Tạo thư mục
-mkdir discord_bot
-cd discord_bot
+cd ~/discord_bot
+git fetch --all
+git reset --hard origin/main
 ```
+*Lệnh này sẽ làm cho thư mục trên điện thoại giống hệt trên máy tính của bạn.*
 
-**LƯU Ý**: Vì code đang ở trên PC của bạn, bạn cần **Copy** nội dung file `main.py`, `database/`, `scraper/`, `.env` sang điện thoại.
-*   **Cách 1 (Thủ công)**: Dùng lệnh `nano main.py` -> Copy code từ PC -> Paste vào Termux -> Bấm `Ctrl+X` -> `Y` -> `Enter` để lưu.
-*   **Cách 2 (Git)**: Nếu bạn đã đẩy code lên GitHub, chỉ cần `git clone <link_repo>`.
+*(Nếu bạn cài thủ công không qua Git: Hãy xóa thư mục cũ `rm -rf ~/discord_bot`, tạo lại và copy file `main.py` cùng các thư mục `bot`, `config`, `database`, `scraper` sang).*
 
-*(Giả sử bạn sẽ copy file bằng cách thủ công hoặc dùng Git. Dưới đây là bước cài thư viện)*
+### Bước 3: Khôi phục Dữ liệu (Quan trọng)
+Vì lệnh `git reset --hard` có thể không ảnh hưởng file không được track (như `.env` và `schedule.db`), nhưng để chắc chắn:
+- Kiểm tra file cấu hình: `cat .env` (Nếu mất thì tạo lại).
+- Database `schedule.db` sẽ được giữ nguyên nếu nó nằm trong `.gitignore` (nhưng thường ta track schema, data thì local). Nếu bạn lỡ xóa thì bot sẽ tạo lại DB mới.
 
-## 3. Cài đặt Thư viện cho Bot
+### Bước 4: Chạy Bot mới
+Cấu trúc mới vẫn chạy từ `main.py` nhưng gọn hơn nhiều.
+
 ```bash
-# Tạo môi trường ảo (khuyên dùng để tránh lỗi hệ thống)
-python3 -m venv venv
-source venv/bin/activate
+# Kích hoạt môi trường ảo (nếu có)
+source venv/bin/activate 
 
-# Cài các thư viện cần thiết
-pip install discord.py python-dotenv apscheduler playwright pydantic python-dateutil
+# Cài lại thư viện (để đảm bảo không thiếu gì)
+pip install -r requirements.txt
+
+# Chạy bot
+python main.py
 ```
 
-## 4. Cài đặt Playwright (Quan trọng)
-Playwright cần tải trình duyệt riêng để chạy được trên điện thoại:
-```bash
-playwright install chromium
-playwright install-deps
-```
-*Lưu ý: Bước này sẽ tốn dung lượng và thời gian khá lâu.*
+### 💡 Lưu ý
+- Nếu gặp lỗi `ModuleNotFoundError`, hãy chắc chắn bạn đã chạy `pip install` ở Bước 4.
+- Lệnh `!schoolsetup` và `!mailnew` vẫn hoạt động bình thường, dữ liệu cũ trong `schedule.db` vẫn còn (trừ khi bạn xóa file db).
 
-## 5. Chạy Bot
-Trước khi chạy, hãy chắc chắn bạn đã tạo file `.env` chứa Token.
-```bash
-# Tạo file .env nếu chưa có
-nano .env
-# (Dán nội dung: DISCORD_TOKEN=... SCHOOL_USERNAME=... SCHOOL_PASSWORD=...)
-# Lưu lại: Ctrl+X -> Y -> Enter
-```
-
-Chạy bot:
-```bash
-python3 main.py
-```
-
-## Mẹo treo 24/7 trên điện thoại
-- Sau khi bot chạy, **đừng tắt ứng dụng Termux**.
-- Hãy gạt thanh thông báo xuống, tìm thông báo của Termux và chọn "Acquire wakelock" (Giữ máy thức) để Android không tự động giết ứng dụng khi tắt màn hình.

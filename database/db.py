@@ -42,6 +42,19 @@ def init_db():
         FOREIGN KEY(user_id) REFERENCES users(discord_id)
     );
     """)
+
+    # Table for Multi-Account Gmail
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS gmail_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL, -- Discord User ID who owns this account
+        email TEXT NOT NULL,
+        app_password TEXT NOT NULL,
+        last_checked DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, email)
+    );
+    """)
     
     conn.commit()
     conn.close()

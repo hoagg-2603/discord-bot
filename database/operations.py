@@ -2,20 +2,59 @@ import sqlite3
 from database.db import get_connection
 from datetime import datetime
 
-def save_user(discord_id, student_code, password_encrypted=None):
+
+def save_user(discord_id, student_code, password=None):
     conn = get_connection()
     cursor = conn.cursor()
     try:
-        cursor.execute("""
-            INSERT INTO users (discord_id, student_code, password_encrypted, last_sync)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(discord_id) DO UPDATE SET
-            student_code=excluded.student_code,
-            last_sync=excluded.last_sync
-        """, (discord_id, student_code, password_encrypted, datetime.now()))
+        # Check if updating or inserting
+        if password:
+            cursor.execute("""
+                INSERT INTO users (discord_id, student_code, password_encrypted, last_sync)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(discord_id) DO UPDATE SET
+                student_code=excluded.student_code,
+                password_encrypted=excluded.password_encrypted,
+                last_sync=excluded.last_sync
+            """, (str(discord_id), student_code, password, datetime.now()))
+        else:
+            # If password not provided, don't overwrite it (preserve existing)
+             cursor.execute("""
+                INSERT INTO users (discord_id, student_code, last_sync)
+                VALUES (?, ?, ?)
+                ON CONFLICT(discord_id) DO UPDATE SET
+                student_code=excluded.student_code,
+                last_sync=excluded.last_sync
+            """, (str(discord_id), student_code, datetime.now()))
+            
         conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error saving user: {e}")
+        return False
     finally:
         conn.close()
+
+def get_users():
+    """
+    Returns list of users with their credentials.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT discord_id, student_code, password_encrypted FROM users")
+        rows = cursor.fetchall()
+        users = []
+        for r in rows:
+            users.append({
+                "discord_id": r[0],
+                "student_code": r[1],
+                "password": r[2]
+            })
+        return users
+    finally:
+        conn.close()
+
 
 def save_schedule(discord_id, schedule_data):
     """
@@ -230,3 +269,61 @@ def get_upcoming_classes(minutes_window=60):
         
     return upcoming
 
+
+def add_gmail_account(user_id, email, app_password):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO gmail_accounts (user_id, email, app_password, last_checked)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, email) DO UPDATE SET
+            app_password=excluded.app_password
+        """, (str(user_id), email, app_password, datetime.now()))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error adding gmail account: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_gmail_accounts(user_id=None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        if user_id:
+            cursor.execute("""
+                SELECT email, app_password, last_checked FROM gmail_accounts WHERE user_id = ?
+            """, (str(user_id),))
+        else:
+            cursor.execute("""
+                SELECT email, app_password, last_checked, user_id FROM gmail_accounts
+            """)
+        
+        rows = cursor.fetchall()
+        accounts = []
+        for r in rows:
+            acc = {
+                "email": r[0],
+                "app_password": r[1],
+                "last_checked": r[2]
+            }
+            if len(r) > 3:
+                acc["user_id"] = r[3]
+            accounts.append(acc)
+        return accounts
+    finally:
+        conn.close()
+
+def delete_gmail_account(user_id, email):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            DELETE FROM gmail_accounts WHERE user_id = ? AND email = ?
+        """, (str(user_id), email))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
